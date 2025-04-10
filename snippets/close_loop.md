@@ -224,7 +224,7 @@ Using the UI everytime to create and setup Label Studio Projects is cumbersome. 
 
 ::: {.cell .code}
 ```python
-import requests-
+import requests
 
 LABEL_STUDIO_URL ='http://label-studio:8080'
 API_TOKEN = 'ab9927067c51ff279d340d7321e4890dc2841c4a'
@@ -687,7 +687,9 @@ docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-feedback.yaml up 
 :::
 
 ::: {.cell .code}
+```python
 print(sync_import_storage(project_id))
+```
 ::: 
 
 ::: {.cell .markdown}
@@ -696,7 +698,9 @@ print(sync_import_storage(project_id))
 :::
 
 ::: {.cell .code}
+```python
 print(sync_export_storage(project_id))
+```
 ::: 
 
 ::: {.cell .markdown}
