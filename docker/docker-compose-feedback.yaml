@@ -121,6 +121,19 @@ services:
       - LABEL_STUDIO_USERNAME=gourmetgramuser@gmail.com
       - LABEL_STUDIO_PASSWORD=gourmetgrampassword
       - LABEL_STUDIO_USER_TOKEN=ab9927067c51ff279d340d7321e4890dc2841c4a
+  
+  jupyter:
+    image: quay.io/jupyter/pytorch-notebook:pytorch-2.5.1
+    container_name: jupyter
+    ports:
+      - "8888:8888"
+    environment:
+      - FOOD11_DATA_DIR=/mnt/Food-11
+    volumes:
+      - /home/cc/eval-loop-chi/workspace:/home/jovyan/work # mount workspace
+      - food11:/mnt
+    command: >
+      bash -c "python3 -m pip install alibi-detect && start-notebook.sh"
 
 volumes:
   food11:
