@@ -69,7 +69,15 @@ services:
 
       # Create empty production.json in tracking bucket
       echo '[]' > /tmp/production.json
+      echo '[]' > /tmp/processed_randomsampled.json
+      echo '[]' > /tmp/processed_lowconfidence.json
+      echo '[]' > /tmp/processed_userfeedback.json
+      echo '[]' > /tmp/processed_userfeedback2.json
       mc cp /tmp/production.json myminio/tracking/
+      mc cp /tmp/processed_randomsampled.json myminio/tracking/
+      mc cp /tmp/processed_lowconfidence.json myminio/tracking/
+      mc cp /tmp/processed_userfeedback.json myminio/tracking/
+      mc cp /tmp/processed_userfeedback2.json myminio/tracking/
       
       echo 'MinIO initialization completed'
       "
