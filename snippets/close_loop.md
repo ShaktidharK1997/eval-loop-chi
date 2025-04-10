@@ -49,7 +49,7 @@ A project in Label Studio is a workspace where you organize your data annotation
 - Its own dataset of items to be labeled
 - Unique annotation guidelines and settings
 
-Projects help you organize different annotation tasks separately. For example, in your case, the "Random Sampling Review" project will specifically focus on reviewing and correcting random samples of food classification predictions.
+Projects help you organize different annotation tasks separately. For example, the "Random Sampling Review" project will specifically focus on reviewing and correcting random samples of food classification predictions.
 
 For the first project, lets create it via the Label Studio UI. 
 
@@ -72,6 +72,7 @@ Now, let's connect this Project to an input storage.
 - Here, add the Storage title as `Source Storage`, Bucket Name as `labelstudio`, Bucket Prefix as `tasks/randomsampled`, Region Name as `us-east-1`, S3 Endpoint as `http://minio:9000`, Access Key ID as `minioadmin`, Secret Access Key as `minioadmin`
 - Click on Check Connection to validate, and then click on Add Storage
 - Click on Sync Storage to sync the input storage with label studio
+- Now, in the `Random Sampling Review` Project, you'll find a sample task that you can go through. 
 
 Similarly, let's connect this Project to an output storage.
 
@@ -204,11 +205,11 @@ Our first feedback loop method randomly selects production images for human anno
 docker exec scheduler python /app/scripts/random_sampling.py
 ```
 
-- After execution, the sampling script automatically generates task JSONs and places them in the /tasks/randomsampled folder within the labelstudio bucket (your configured Source Storage). Visit http://{public-node-ip}:5000 to examine the structure of these task files, which contain the image references and metadata needed for the annotation process.
+- After execution, the sampling script automatically generates task JSONs and places them in the /tasks/randomsampled folder within the labelstudio bucket (your configured Source Storage). Visit MinIO object store at http://{public-node-ip}:9001 to examine the structure of these task files, which contain the image references and metadata needed for the annotation process.
 - Now, go to Label Studio and check the Random Sampling Review Project. You'll notice there are no tasks displayed yet. This is because Label Studio doesn't automatically synchronize with the source storage - it won't scan for new tasks until we explicitly trigger a sync operation either through the GUI or the Label Studio API.
 - Let's do it via the GUI this time. Head to settings and in the Cloud Storage tab, Click on Sync Storage for source storage. Now, you'll be able to see the tasks in the project. 
 - Go ahead and complete the labelling tasks for the randomly sampled images.
-- After completing the labelling tasks, you need to send your work back to the storage system. So in Settings ->Cloud Storage tab, Click on Sync Storage for target storage
+- After completing the labelling tasks, you need to send your labelling results back to the MinIO. So in Settings ->Cloud Storage tab, Click on Sync Storage for target storage. Now, you will find the labelling results in the /output/randomsampled folder within the labelstudio bucket
 :::
 
 ::: {.cell .markdown}   
@@ -223,7 +224,7 @@ Using the UI everytime to create and setup Label Studio Projects is cumbersome. 
 
 ::: {.cell .code}
 ```python
-import requests
+import requests-
 
 LABEL_STUDIO_URL ='http://label-studio:8080'
 API_TOKEN = 'ab9927067c51ff279d340d7321e4890dc2841c4a'
@@ -447,12 +448,6 @@ docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-feedback.yaml up 
 ::: {.cell .code}
 ```python
 def sync_import_storage(project_id):
-
-    if project_id not in PROJECT_MAP:
-        print(f"Unknown project ID: '{project_id}'")
-        return False
-        
-    storage_type = PROJECT_MAP[project_id]
     
     headers = {
         "Authorization": f"Token {API_TOKEN}"
@@ -470,7 +465,7 @@ def sync_import_storage(project_id):
             storage_id = storages[0]["id"]
     
     if not storage_id:
-        print(f"Import storage for {storage_type} not found in project {project_id}!")
+        print(f"Import storage not found in project {project_id}!")
         return False
     
     # Sync storage
@@ -480,7 +475,7 @@ def sync_import_storage(project_id):
     )
     
     if sync_response.status_code in [200, 201, 204]:
-        print(f"Successfully synced import storage for {storage_type} (project ID {project_id})")
+        print(f"Successfully synced import storage for (project ID {project_id})")
         return True
     else:
         print(f"Failed to sync import storage: {sync_response.status_code} {sync_response.text}")
@@ -500,14 +495,6 @@ print((sync_import_storage(project_id)))
 ::: {.cell .code}
 ```python
 def sync_export_storage(project_id):
-
-    
-    if project_id not in PROJECT_MAP:
-        print(f"Unknown project ID: '{project_id}'")
-        return False
-        
-    storage_type = PROJECT_MAP[project_id]
-    print(f"Attempting to sync export storage for {storage_type} (project ID {project_id})...")
     
     # Get storage ID
     headers = {
@@ -526,7 +513,7 @@ def sync_export_storage(project_id):
             storage_id = storages[0]["id"]
     
     if not storage_id:
-        print(f"Export storage for {storage_type} not found in project {project_id}!")
+        print(f"Export storage not found in project {project_id}!")
         return False
     
     # Sync storage
@@ -536,7 +523,7 @@ def sync_export_storage(project_id):
     )
     
     if sync_response.status_code in [200, 201, 204]:
-        print(f"Successfully synced export storage for {storage_type} (project ID {project_id})")
+        print(f"Successfully synced export storage (project ID {project_id})")
         return True
     else:
         print(f"Failed to sync export storage: {sync_response.status_code} {sync_response.text}")
@@ -674,7 +661,7 @@ def feedback():
     })
 ```
 
-- Update Frontend Files and rebuild the Flask container 
+- Update Frontend Files and rebuild the Flask container using SSH terminal
 
 ```bash
 # Copying front end files into our flask container to update the UI to include feedback
@@ -692,12 +679,12 @@ cp /home/cc/eval-loop-chi/images/flag-icon.svg /home/cc/eval-loop-chi/gourmetgra
 docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-feedback.yaml up flask --build
 ```
 
-
 #### Testing the Feedback Loop
 
 - Go to http://{public-node-ip}:5000
 - Upload some of the test images from the data/userfeedback/ folder
 - Provide negative feedback for the prediction by clicking on the flag icon
+:::
 
 ::: {.cell .code}
 print(sync_import_storage(project_id))
@@ -727,6 +714,34 @@ docker exec scheduler python3 /app/scripts/process_outputs.py
 ```
 
 Navigate to the MinIO web interface at http://{public-node-ip}:9001 and inspect the cleanproduction, lowconfidence and userfeedback buckets to find the structured dataset.
+
+#### Automating workflows
+
+To maintain an efficient evaluation loop, we can automate three critical processes using cron jobs in our scheduler container:
+
+1. Random Sampling: Automatically select representative images from production data
+2. Storage Synchronization: Keep Label Studio and MinIO storage in sync
+3. Output Processing: Transform completed annotations into structured training data
+
+Now, let's establish a cron schedule within the scheduler containe to automate these processes:
+
+```bash
+docker exec -it scheduler bash
+
+crontab -e
+```
+
+Add the following lines to run the processes on a schedule:
+
+```bash
+0 0 * * * python /app/scripts/random_sampling.py >> /var/log/sampling.log 2>&1
+
+0 * * * * python /app/scripts/sync_script.py >> /var/log/sync.log 2>&1
+
+15 * * * * python /app/scripts/process_outputs.py >> /var/log/process.log 2>&1
+
+# Empty line at the end is required
+```
 
 :::
 
@@ -866,7 +881,7 @@ def feedback():
         }), 500
 ```
 
-- Update Frontend files and rebuild flask container : 
+- Update Frontend files and rebuild flask container in SSH terminal : 
 
 ```bash
 # Copying front end files into our flask container to update the UI to include feedback

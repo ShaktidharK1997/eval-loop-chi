@@ -20,7 +20,9 @@ def get_all_projects():
     )
     
     if response.status_code == 200:
-        projects = response.json()
+        json_response = response.json()
+        projects = json_response.get('results', [])
+    
         return [str(project["id"]) for project in projects]
     else:
         return []
@@ -40,6 +42,7 @@ def sync_import_storage(project_id):
     if response.status_code == 200:
         storages = response.json()
         if storages:
+            print(f'Project {project_id} has successfully synced import storage')
             storage_id = storages[0]["id"]
     
     if not storage_id:
@@ -71,6 +74,7 @@ def sync_export_storage(project_id):
     if response.status_code == 200:
         storages = response.json()
         if storages:
+            print(f'Project {project_id} has successfully synced export storage')
             storage_id = storages[0]["id"]
     
     if not storage_id:
