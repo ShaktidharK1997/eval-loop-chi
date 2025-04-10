@@ -13,7 +13,7 @@ docker compose -f eval-loop-chi/docker/docker-compose-feedback.yaml up -d
 ```
 
 ```bash
-# Wait 30 seconds for system to get ready
+# Wait 60 seconds for system to get ready
 sleep 60
 ```
 
