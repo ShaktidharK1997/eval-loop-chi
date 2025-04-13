@@ -1,0 +1,67 @@
+name: eval-loop-scheduler
+services:
+  random_sampler:
+    container_name: random_sampler
+    image: python:3.9-slim
+    volumes:
+      - /home/cc/eval-loop-chi/scripts:/app/scripts
+    environment:
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        pip install --no-cache-dir s3fs requests
+        python /app/scripts/random_sampling.py
+    networks:
+      - eval_loop_network
+    
+  labelstudio_sync:
+    container_name: labelstudio_sync
+    image: python:3.9-slim
+    volumes:
+      - /home/cc/eval-loop-chi/scripts:/app/scripts
+    environment:
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - LABEL_STUDIO_URL=http://label-studio:8080
+      - LABEL_STUDIO_USERNAME=gourmetgramuser@gmail.com
+      - LABEL_STUDIO_PASSWORD=gourmetgrampassword
+      - LABEL_STUDIO_USER_TOKEN=ab9927067c51ff279d340d7321e4890dc2841c4a
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        pip install --no-cache-dir s3fs requests
+        python /app/scripts/sync_script.py
+    networks:
+      - eval_loop_network
+    
+  annotation_processor:
+    container_name: annotation_processor
+    image: python:3.9-slim
+    volumes:
+      - /home/cc/eval-loop-chi/scripts:/app/scripts
+    environment:
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        pip install --no-cache-dir s3fs requests
+        python /app/scripts/process_outputs.py
+    networks:
+      - eval_loop_network
+
+networks:
+  eval_loop_network:
+    external: true
+    name: eval_loop_network

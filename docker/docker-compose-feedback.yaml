@@ -7,19 +7,24 @@ services:
     container_name: fastapi_server
     ports:
       - "8000:8000"  # for HTTP requests
+    networks:
+      - eval_loop_network
+    
   
   minio:
-      image: minio/minio
-      container_name: minio
-      ports:
-        - "9000:9000"
-        - "9001:9001"
-      environment: 
-        - MINIO_ROOT_USER=minioadmin
-        - MINIO_ROOT_PASSWORD=minioadmin
-      volumes:
-        - food11:/data
-      command: server /data --console-address ':9001'
+    image: minio/minio
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment: 
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - food11:/data
+    command: server /data --console-address ':9001'
+    networks:
+      - eval_loop_network
     
   # Initialization container for MinIO
   minio-init:
@@ -81,6 +86,8 @@ services:
       
       echo 'MinIO initialization completed'
       "
+    networks:
+      - eval_loop_network
 
   flask:
     build:
@@ -91,6 +98,8 @@ services:
       - "5000:5000"
     environment:
       - FASTAPI_SERVER_URL=http://fastapi_server:8000 # let Flask app know where to access the inference endpoint
+    networks:
+      - eval_loop_network
   
   label-studio:
     image: heartexlabs/label-studio:latest
@@ -112,26 +121,11 @@ services:
       - POSTGRES_DB=appdb
     depends_on:
       - minio-init
-
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.scheduler
-    container_name: scheduler
-    volumes:
-      - /home/cc/eval-loop-chi/scripts:/app/scripts
-    environment:
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - LABEL_STUDIO_URL=http://label-studio:8080
-      - LABEL_STUDIO_USERNAME=gourmetgramuser@gmail.com
-      - LABEL_STUDIO_PASSWORD=gourmetgrampassword
-      - LABEL_STUDIO_USER_TOKEN=ab9927067c51ff279d340d7321e4890dc2841c4a
+    networks:
+      - eval_loop_network
   
   jupyter:
-    image: quay.io/jupyter/pytorch-notebook:pytorch-2.5.1
+    image: quay.io/jupyter/minimal-notebook:latest
     container_name: jupyter
     ports:
       - "8888:8888"
@@ -142,6 +136,14 @@ services:
       - food11:/mnt
     command: >
       bash -c "python3 -m pip install alibi-detect && start-notebook.sh"
+    networks:
+      - eval_loop_network
+
+networks:
+  eval_loop_network:
+    name: eval_loop_network
+    driver: bridge
+
 
 volumes:
   food11:

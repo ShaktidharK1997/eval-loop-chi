@@ -69,7 +69,7 @@ Now, let's connect this Project to an input storage.
 
 - In the `Random Sampling Review` Project, click on Settings 
 - In the Cloud Storage tab, click on "Add Source Storage." This connects Label Studio to the location where your annotation task files are stored. 
-- Here, add the Storage title as `Source Storage`, Bucket Name as `labelstudio`, Bucket Prefix as `tasks/randomsampled`, Region Name as `us-east-1`, S3 Endpoint as `http://minio:9000`, Access Key ID as `minioadmin`, Secret Access Key as `minioadmin`
+- Here, with Storage Type AWS S3, add the Storage title as `Source Storage`, Bucket Name as `labelstudio`, Bucket Prefix as `tasks/randomsampled`, Region Name as `us-east-1`, S3 Endpoint as `http://minio:9000`, Access Key ID as `minioadmin`, Secret Access Key as `minioadmin`
 - Click on Check Connection to validate, and then click on Add Storage
 - Click on Sync Storage to sync the input storage with label studio
 - Now, in the `Random Sampling Review` Project, you'll find a sample task that you can go through. 
@@ -77,11 +77,11 @@ Now, let's connect this Project to an input storage.
 Similarly, let's connect this Project to an output storage.
 
 - In the Cloud Storage tab, click on "Add Target Storage." This establishes a designated location where Label Studio will save all completed annotations.
-- Here, add the Storage title as `Target Storage`, Bucket Name as `labelstudio`, Bucket Prefix as `output/randomsampled`, Region Name as `us-east-1`, S3 Endpoint as `http://minio:9000`, Access Key ID as `minioadmin`, Secret Access Key as `minioadmin`
+- Here, with Storage Type AWS S3, add the Storage title as `Target Storage`, Bucket Name as `labelstudio`, Bucket Prefix as `output/randomsampled`, Region Name as `us-east-1`, S3 Endpoint as `http://minio:9000`, Access Key ID as `minioadmin`, Secret Access Key as `minioadmin`
 - Click on Check Connection to validate, and then click on Add Storage
 - Click on Sync Storage to sync the output storage with label studio
 
-With Label Studio configured for our first project, let's move forward with the annotation workflow.
+With Label Studio configured for our first project, let's move forward.
 :::
 
 ::: {.cell .markdown}
@@ -193,23 +193,23 @@ Rebuild the Flask Container:
 docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-feedback.yaml up flask --build
 ```
 
-Our first feedback loop method randomly selects production images for human annotation.
+Now that our Flask application is set up to store user-submitted food images in the production bucket, we need to collect annotated samples to improve our model. To demonstrate this feedback loop, let's start by uploading some test images and then running our random sampling service, which will automatically select a subset of these images for human review in Label Studio.
 
 #### Testing the Feedback Loop
 
-- Go to http://{public-node-ip}:5000
-- Upload test images from the /data/food11 folder 
-- Initiate the random sampling process by executing the scheduler's sampling script in SSH
+- Access the GourmetGram web interface at http://{public-node-ip}:5000
+- Upload test images from the /data/food11 folder to GourmetGram
+- Now, initiate the random sampler service by executing the following command in your SSH terminal:
 
 ```bash
-docker exec scheduler python /app/scripts/random_sampling.py
+docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-scheduler.yaml up random_sampler
 ```
 
-- After execution, the sampling script automatically generates task JSONs and places them in the /tasks/randomsampled folder within the labelstudio bucket (your configured Source Storage). Visit MinIO object store at http://{public-node-ip}:9001 to examine the structure of these task files, which contain the image references and metadata needed for the annotation process.
-- Now, go to Label Studio and check the Random Sampling Review Project. You'll notice there are no tasks displayed yet. This is because Label Studio doesn't automatically synchronize with the source storage - it won't scan for new tasks until we explicitly trigger a sync operation either through the GUI or the Label Studio API.
-- Let's do it via the GUI this time. Head to settings and in the Cloud Storage tab, Click on Sync Storage for source storage. Now, you'll be able to see the tasks in the project. 
-- Go ahead and complete the labelling tasks for the randomly sampled images.
-- After completing the labelling tasks, you need to send your labelling results back to the MinIO. So in Settings ->Cloud Storage tab, Click on Sync Storage for target storage. Now, you will find the labelling results in the /output/randomsampled folder within the labelstudio bucket
+- The random sampler service generates task JSONs and places them in the /tasks/randomsampled folder within the labelstudio bucket (your configured Source Storage). Visit MinIO object store at http://{public-node-ip}:9001 to examine the structure of these task files, which contain the image references and metadata needed for the annotation process
+- Now, go to Label Studio and check the Random Sampling Review Project. You'll notice there are no tasks displayed yet. This is because Label Studio doesn't automatically synchronize with the source storage - it won't scan for new tasks until we explicitly trigger a sync operation either through the GUI or the Label Studio API
+- Let's do it via the GUI this time. Head to settings and in the Cloud Storage tab, Click on Sync Storage for source storage. Now, you'll be able to see the tasks in the project
+- Go ahead and complete the labelling tasks for the randomly sampled images
+- After completing the labelling tasks, you need to send your labelling task results back to the MinIO. So in Settings ->Cloud Storage tab, Click on Sync Storage for target storage. Now, you will find the labelling results in the /output/randomsampled folder within the labelstudio bucket in MinIO
 :::
 
 ::: {.cell .markdown}   
@@ -684,6 +684,7 @@ docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-feedback.yaml up 
 - Go to http://{public-node-ip}:5000
 - Upload some of the test images from the data/userfeedback/ folder
 - Provide negative feedback for the prediction by clicking on the flag icon
+- Now Synchronize Label Studio with the source storage
 :::
 
 ::: {.cell .code}
@@ -706,7 +707,7 @@ print(sync_export_storage(project_id))
 ::: {.cell .markdown}
 Now that we've gathered high-quality annotations from human reviewers in Label Studio, we need to extract and structure this data for model improvement. The annotation results are currently stored as JSON files in the /labelstudio/output/ directory within our MinIO storage system.
 
-This below script does the following:
+This below service does the following:
 
 - Extracts the human-verified labels from the annotation results
 - Retrieves the corresponding images from our production storage
@@ -714,37 +715,44 @@ This below script does the following:
 - Creates a structured dataset ready for model retraining
 
 ```bash
-docker exec scheduler python3 /app/scripts/process_outputs.py
+docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-scheduler.yaml up annotation_processor
 ```
 
 Navigate to the MinIO web interface at http://{public-node-ip}:9001 and inspect the cleanproduction, lowconfidence and userfeedback buckets to find the structured dataset.
 
 #### Automating workflows
 
-To maintain an efficient evaluation loop, we can automate three critical processes using cron jobs in our scheduler container:
+To maintain an efficient evaluation loop, we can automate three services using the host system's cron to run our Docker services at scheduled intervals:
 
-1. Random Sampling: Automatically select representative images from production data
+1. Random Sampling: Automatically select images from production data for random sampling
 2. Storage Synchronization: Keep Label Studio and MinIO storage in sync
 3. Output Processing: Transform completed annotations into structured training data
 
 Now, let's establish a cron schedule within the scheduler containe to automate these processes:
 
 ```bash
-docker exec -it scheduler bash
-
 crontab -e
 ```
 
 Add the following lines to run the processes on a schedule:
 
 ```bash
-0 0 * * * python /app/scripts/random_sampling.py >> /var/log/sampling.log 2>&1
+# Run random sampling every day at midnight
+0 0 * * * docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-scheduler.yaml up random_sampler >> /home/cc/random_sampling.log 2>&1
 
-0 * * * * python /app/scripts/sync_script.py >> /var/log/sync.log 2>&1
+# Run storage sync every hour
+0 * * * * docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-scheduler.yaml up labelstudio_sync >> /home/cc/sync.log 2>&1
 
-15 * * * * python /app/scripts/process_outputs.py >> /var/log/process.log 2>&1
+# Run output processing 15 minutes after every hour
+15 * * * * docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-scheduler.yaml up annotation_processor >> /home/cc/process.log 2>&1
 
 # Empty line at the end is required
+```
+
+Use the below command to display the current cron schedule :
+
+```bash
+crontab -l
 ```
 
 :::
@@ -910,10 +918,14 @@ docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-feedback.yaml up 
 - Go to application interface at http://{public-node-ip}:5000
 - Upload test images from the data/userfeedback/ directory
 - Locate the pencil icon adjacent to the prediction and use it to select the correct classification from the dropdown menu
-- Process the corrections by executing:
+
+Unlike our previous feedback loops, this method directly captures user corrections without requiring Label Studio as an intermediary. When users select a new class from the dropdown menu, we automatically generate annotation data in the same JSON format that Label Studio would produce using create_output_json function, and place the JSON file directly in the output/userfeedback2 folder in the labelstudio bucket.
+
+- To process these user-generated annotations and incorporate them into your training dataset, execute:
 
 ```bash
-docker exec scheduler python3 /app/scripts/process_outputs.py
+docker-compose -f /home/cc/eval-loop-chi/docker/docker-compose-scheduler.yaml up annotation_processor
 ```
+
 - Navigate to the MinIO web interface at http://{public-node-ip}:9001 and inspect the userfeedback2 buckets to find the structured dataset based on the user class predictions.
 :::
